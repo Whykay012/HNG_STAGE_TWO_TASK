@@ -1,4 +1,4 @@
-const Profile = require('../model/Profile');
+const Profile = require('../model/profile');
 const { fetchProcessedData } = require('../services/profileService');
 const { uuidv7 } = require('uuidv7');
 const { BadRequestError, NotFoundError } = require('../utils/customErrors');
