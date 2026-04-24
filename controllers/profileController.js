@@ -1,25 +1,25 @@
 const profileService = require('../services/profileService');
 const { BadRequestError, NotFoundError, UnprocessableEntityError } = require('../utils/customErrors');
 
-// UUID v7 Regex: 8-4-4-4-12 format, version 7
 const isValidUUIDv7 = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 
 exports.getAllProfiles = async (req, res, next) => {
   try {
-    // Check if sort_by is valid if it exists
-    const { sort_by } = req.query;
-    const allowedSorts = ['age', 'created_at', 'gender_probability'];
+    const { sort_by, page, limit } = req.query;
+    
+    // Validation for sort_by
+    const allowedSorts = ['age', 'created_at', 'gender_probability', 'id'];
     if (sort_by && !allowedSorts.includes(sort_by)) {
       return res.status(400).json({ status: "error", message: "Invalid query parameters" });
     }
 
     const result = await profileService.fetchProfiles(req.query);
     
-    // The bot expects this exact structure
+    // Success Response Envelope
     res.status(200).json({
       status: "success",
-      page: result.p,
-      limit: result.l,
+      page: result.page,
+      limit: result.limit,
       total: result.total,
       data: result.profiles
     });
@@ -28,22 +28,19 @@ exports.getAllProfiles = async (req, res, next) => {
   }
 };
 
-
 exports.searchProfiles = async (req, res, next) => {
   try {
     const { q, page, limit } = req.query;
-    if (!q) return res.status(400).json({ status: "error", message: "Missing or empty parameter" });
+    if (!q || q.trim() === "") {
+      return res.status(400).json({ status: "error", message: "Missing or empty parameter" });
+    }
 
     const queryText = q.toLowerCase();
-    const filters = { 
-        page: parseInt(page) || 1, 
-        limit: parseInt(limit) || 10 
-    };
+    const filters = { page, limit };
 
-    // NLP Mapping - Use separate IFs to allow for broader matches
+    // NLP Parsing Logic
     if (queryText.includes("female")) filters.gender = "female";
-    if (queryText.includes("male") && !queryText.includes("female")) filters.gender = "male"; 
-    // ^ The check above prevents "female" being caught by "male"
+    else if (queryText.includes("male")) filters.gender = "male";
 
     if (queryText.includes("young")) {
       filters.min_age = 16;
@@ -68,10 +65,11 @@ exports.searchProfiles = async (req, res, next) => {
     }
 
     const result = await profileService.fetchProfiles(filters);
+    
     res.status(200).json({
       status: "success",
-      page: result.p,
-      limit: result.l,
+      page: result.page,
+      limit: result.limit,
       total: result.total,
       data: result.profiles
     });
@@ -83,7 +81,6 @@ exports.searchProfiles = async (req, res, next) => {
 exports.getProfile = async (req, res, next) => {
   try {
     if (!isValidUUIDv7(req.params.id)) throw new UnprocessableEntityError("Invalid UUID format");
-    
     const profile = await profileService.getById(req.params.id);
     if (!profile) throw new NotFoundError();
     res.status(200).json({ status: "success", data: profile });
@@ -93,7 +90,6 @@ exports.getProfile = async (req, res, next) => {
 exports.updateProfile = async (req, res, next) => {
   try {
     if (!isValidUUIDv7(req.params.id)) throw new UnprocessableEntityError("Invalid UUID format");
-    
     const profile = await profileService.updateById(req.params.id, req.body);
     if (!profile) throw new NotFoundError();
     res.status(200).json({ status: "success", data: profile });
@@ -103,7 +99,6 @@ exports.updateProfile = async (req, res, next) => {
 exports.deleteProfile = async (req, res, next) => {
   try {
     if (!isValidUUIDv7(req.params.id)) throw new UnprocessableEntityError("Invalid UUID format");
-    
     const profile = await profileService.deleteById(req.params.id);
     if (!profile) throw new NotFoundError();
     res.status(204).send();

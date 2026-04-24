@@ -10,6 +10,7 @@ exports.fetchProfiles = async (filters) => {
 
   const query = {};
 
+  // Filtering Logic
   if (gender) query.gender = gender;
   if (country_id) query.country_id = country_id.toUpperCase();
   if (age_group) query.age_group = age_group;
@@ -20,33 +21,42 @@ exports.fetchProfiles = async (filters) => {
     if (max_age) query.age.$lte = Number(max_age);
   }
 
-  if (min_gender_probability) query.gender_probability = { $gte: parseFloat(min_gender_probability) };
-  if (min_country_probability) query.country_probability = { $gte: parseFloat(min_country_probability) };
+  if (min_gender_probability) {
+    query.gender_probability = { $gte: parseFloat(min_gender_probability) };
+  }
+  if (min_country_probability) {
+    query.country_probability = { $gte: parseFloat(min_country_probability) };
+  }
 
-  // Strict Sorting Logic
-  // Map 'id' to '_id' if the bot sends it, otherwise use allowed fields
+  // Sorting Logic
   let sortField = sort_by === 'id' ? '_id' : sort_by;
   if (!['_id', 'age', 'created_at', 'gender_probability'].includes(sortField)) {
     sortField = 'created_at'; 
   }
-  
   const sortOrder = order === 'asc' ? 1 : -1;
 
-  // Strict Pagination
-  const p = Math.max(1, parseInt(page) || 1);
-  const l = Math.min(50, Math.max(1, parseInt(limit) || 10));
-  const skip = (p - 1) * l;
+  // Pagination Logic (The part failing)
+  // 1. Convert to numbers 2. Default if NaN 3. Apply floor/max caps
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+  const skip = (pageNum - 1) * limitNum;
 
   const [profiles, total] = await Promise.all([
     Profile.find(query)
       .sort({ [sortField]: sortOrder })
       .skip(skip)
-      .limit(l),
+      .limit(limitNum),
     Profile.countDocuments(query)
   ]);
 
-  return { profiles: profiles, total, p, l };
+  return { 
+    profiles, 
+    total, 
+    page: pageNum, 
+    limit: limitNum 
+  };
 };
+
 exports.getById = async (id) => {
   return await Profile.findById(id);
 };
