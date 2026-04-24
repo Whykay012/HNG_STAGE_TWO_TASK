@@ -1,52 +1,63 @@
-const axios = require('axios');
-const https = require('https');
-const { UpstreamError } = require('../utils/customErrors');
+const Profile = require('../model/profile');
 
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false, 
-  keepAlive: true,
-});
+exports.fetchProfiles = async (filters) => {
+  let { 
+    gender, country_id, age_group, 
+    min_age, max_age, 
+    min_gender_probability, min_country_probability,
+    sort_by, order, page, limit 
+  } = filters;
 
-const getAgeGroup = (age) => {
-  if (age <= 12) return "child";
-  if (age <= 19) return "teenager";
-  if (age <= 59) return "adult";
-  return "senior";
-};
+  const query = {};
 
-const fetchProcessedData = async (name) => {
-  try {
-    const [gRes, aRes, nRes] = await Promise.all([
-      axios.get(`https://api.genderize.io?name=${name}`, { httpsAgent }),
-      axios.get(`https://api.agify.io?name=${name}`, { httpsAgent }),
-      axios.get(`https://api.nationalize.io?name=${name}`, { httpsAgent })
-    ]);
+  if (gender) query.gender = gender;
+  if (country_id) query.country_id = country_id.toUpperCase();
+  if (age_group) query.age_group = age_group;
 
-    // Trap for empty/null responses as per HNG requirements
-    if (!gRes.data.gender || gRes.data.count === 0) throw new UpstreamError('Genderize');
-    if (aRes.data.age === null) throw new UpstreamError('Agify');
-    if (!nRes.data.country || nRes.data.country.length === 0) throw new UpstreamError('Nationalize');
-
-    const topCountry = nRes.data.country.reduce((prev, curr) => 
-      (prev.probability > curr.probability) ? prev : curr
-    );
-
-    return {
-      gender: gRes.data.gender,
-      gender_probability: gRes.data.probability,
-      sample_size: gRes.data.count,
-      age: aRes.data.age,
-      age_group: getAgeGroup(aRes.data.age),
-      country_id: topCountry.country_id,
-      country_probability: topCountry.probability
-    };
-  } catch (error) {
-    // If it's already one of our custom UpstreamErrors, re-throw it
-    if (error.statusCode === 502) throw error;
-    
-    // Otherwise, it's likely a network/SSL error (500)
-    throw error;
+  if (min_age || max_age) {
+    query.age = {};
+    if (min_age) query.age.$gte = Number(min_age);
+    if (max_age) query.age.$lte = Number(max_age);
   }
+
+  if (min_gender_probability) query.gender_probability = { $gte: parseFloat(min_gender_probability) };
+  if (min_country_probability) query.country_probability = { $gte: parseFloat(min_country_probability) };
+
+  // Strict Sorting Logic
+  // Map 'id' to '_id' if the bot sends it, otherwise use allowed fields
+  let sortField = sort_by === 'id' ? '_id' : sort_by;
+  if (!['_id', 'age', 'created_at', 'gender_probability'].includes(sortField)) {
+    sortField = 'created_at'; 
+  }
+  
+  const sortOrder = order === 'asc' ? 1 : -1;
+
+  // Strict Pagination
+  const p = Math.max(1, parseInt(page) || 1);
+  const l = Math.min(50, Math.max(1, parseInt(limit) || 10));
+  const skip = (p - 1) * l;
+
+  const [profiles, total] = await Promise.all([
+    Profile.find(query)
+      .sort({ [sortField]: sortOrder })
+      .skip(skip)
+      .limit(l),
+    Profile.countDocuments(query)
+  ]);
+
+  return { profiles: profiles, total, p, l };
+};
+exports.getById = async (id) => {
+  return await Profile.findById(id);
 };
 
-module.exports = { fetchProcessedData };
+exports.updateById = async (id, data) => {
+  return await Profile.findByIdAndUpdate(id, data, {
+    new: true,
+    runValidators: true
+  });
+};
+
+exports.deleteById = async (id) => {
+  return await Profile.findByIdAndDelete(id);
+};

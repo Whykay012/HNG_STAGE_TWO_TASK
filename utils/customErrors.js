@@ -8,17 +8,15 @@ class AppError extends Error {
 }
 
 class BadRequestError extends AppError {
-  constructor(message = "Missing or empty name") { super(message, 400); }
+  constructor(message = "Bad Request") { super(message, 400); }
 }
 
 class NotFoundError extends AppError {
   constructor(message = "Profile not found") { super(message, 404); }
 }
 
-class UpstreamError extends AppError {
-  constructor(apiName) {
-    super(`${apiName} returned an invalid response`, 502);
-  }
+class UnprocessableEntityError extends AppError {
+  constructor(message = "Invalid parameter type or format") { super(message, 422); }
 }
 
-module.exports = { AppError, BadRequestError, NotFoundError, UpstreamError };
+module.exports = { AppError, BadRequestError, NotFoundError, UnprocessableEntityError };
