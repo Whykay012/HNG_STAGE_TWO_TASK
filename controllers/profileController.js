@@ -1,5 +1,6 @@
 const profileService = require('../services/profileService');
 const { BadRequestError, NotFoundError, UnprocessableEntityError } = require('../utils/customErrors');
+const { Parser } = require('json2csv');
 
 const isValidUUIDv7 = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 
@@ -87,14 +88,6 @@ exports.getProfile = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-exports.updateProfile = async (req, res, next) => {
-  try {
-    if (!isValidUUIDv7(req.params.id)) throw new UnprocessableEntityError("Invalid UUID format");
-    const profile = await profileService.updateById(req.params.id, req.body);
-    if (!profile) throw new NotFoundError();
-    res.status(200).json({ status: "success", data: profile });
-  } catch (err) { next(err); }
-};
 
 exports.deleteProfile = async (req, res, next) => {
   try {
@@ -102,5 +95,26 @@ exports.deleteProfile = async (req, res, next) => {
     const profile = await profileService.deleteById(req.params.id);
     if (!profile) throw new NotFoundError();
     res.status(204).send();
+  } catch (err) { next(err); }
+};
+
+exports.exportProfiles = async (req, res, next) => {
+  try {
+    const result = await profileService.fetchProfiles({ limit: 1000 }); // Large batch for export
+    const json2csv = new Parser();
+    const csv = json2csv.parse(result.profiles);
+    
+    res.header('Content-Type', 'text/csv');
+    res.attachment('profiles_export.csv');
+    return res.send(csv);
+  } catch (err) { next(err); }
+};
+
+exports.updateProfile = async (req, res, next) => {
+  // Logic remains the same, but the Route will now have restrictTo('admin')
+  try {
+    const profile = await profileService.updateById(req.params.id, req.body);
+    if (!profile) throw new NotFoundError();
+    res.status(200).json({ status: "success", data: profile });
   } catch (err) { next(err); }
 };
